@@ -1,5 +1,7 @@
 # hermes-claude-plan
 
+[English](./README.md) | [中文](./README_CN.md)
+
 A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that routes Anthropic API requests through the Claude subscription channel for improved rate-limit allocation.
 
 ## Prerequisites
