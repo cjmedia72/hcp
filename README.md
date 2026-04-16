@@ -74,7 +74,7 @@ The plugin starts a lightweight HTTP proxy on `127.0.0.1:28765` (loopback only).
 
 ```bash
 # Quick check
-hermes chat -q "hi" -Q
+hermes chat -q "hello" -Q
 # Should receive a Claude response
 
 # Detailed trace (check billing pool routing)

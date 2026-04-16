@@ -74,7 +74,7 @@ hermes chat
 
 ```bash
 # 快速检查
-hermes chat -q "hi" -Q
+hermes chat -q "hello" -Q
 # 应收到 Claude 回复
 
 # 详细追踪（检查计费池路由）
