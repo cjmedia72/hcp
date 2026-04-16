@@ -4,6 +4,8 @@
 
 A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that routes Anthropic API requests through the Claude subscription channel for improved rate-limit allocation.
 
+**Non-invasive design** -- installs entirely under `~/.hermes/plugins/`, zero modifications to hermes source code. Fully compatible with `hermes update` and `git pull` upgrades. Install and uninstall without side effects.
+
 ## Prerequisites
 
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent) v0.9.0+

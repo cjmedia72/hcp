@@ -4,6 +4,8 @@
 
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 插件，将 Anthropic API 请求路由到 Claude 订阅通道，优化速率限制分配。
 
+**无侵入式设计** -- 完全安装在 `~/.hermes/plugins/` 目录下，不修改 hermes 任何源码文件。与 `hermes update`、`git pull` 升级完全兼容，安装卸载无副作用。
+
 ## 前置条件
 
 - [Hermes Agent](https://github.com/NousResearch/hermes-agent) v0.9.0+
