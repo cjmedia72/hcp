@@ -2,7 +2,7 @@ name: anthropic_plan
 version: 0.1.0
 description: "Hermes plugin that routes Anthropic requests through the Claude subscription channel for improved rate-limit allocation"
 author: "homcto@gmail.com"
-homepage: "https://github.com/homcto/hermes-claude-plan"
+homepage: "https://github.com/Jawf/hermes-claude-plan"
 requires_env: []
 provides_tools: []
 provides_hooks:

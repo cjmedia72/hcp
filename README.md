@@ -16,13 +16,13 @@ A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that route
 ## Install
 
 ```bash
-hermes plugins install <your-username>/hermes-claude-plan
+hermes plugins install Jawf/hermes-claude-plan
 ```
 
 Or clone manually:
 
 ```bash
-git clone https://github.com/<your-username>/hermes-claude-plan.git ~/.hermes/plugins/anthropic_plan
+git clone https://github.com/Jawf/hermes-claude-plan.git ~/.hermes/plugins/anthropic_plan
 ```
 
 ## Configure

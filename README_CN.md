@@ -16,13 +16,13 @@
 ## 安装
 
 ```bash
-hermes plugins install <your-username>/hermes-claude-plan
+hermes plugins install Jawf/hermes-claude-plan
 ```
 
 或手动克隆：
 
 ```bash
-git clone https://github.com/<your-username>/hermes-claude-plan.git ~/.hermes/plugins/anthropic_plan
+git clone https://github.com/Jawf/hermes-claude-plan.git ~/.hermes/plugins/anthropic_plan
 ```
 
 ## 配置
