@@ -7,4 +7,5 @@ requires_env: []
 provides_tools: []
 provides_hooks:
   - on_session_start
-pip_dependencies: []
+pip_dependencies:
+  - ruamel.yaml

@@ -84,23 +84,74 @@ def _build_billing_header(session_hint: str = "") -> str:
     return f"cc_version={ver}; cc_entrypoint=sdk-cli; cch={cch};"
 
 
-def _read_oauth_token() -> Optional[str]:
-    """Read the current access token from ``~/.claude/.credentials.json``."""
-    with _token_cache_lock:
+def _parse_oauth_data(data: dict) -> Optional[str]:
+    """Extract and validate the access token from parsed credentials data.
+
+    Returns the token string, or ``None`` if missing or expired.
+    """
+    oauth = data.get("claudeAiOauth") or {}
+    tok = oauth.get("accessToken")
+    if not tok:
+        return None
+    expires_at_ms = oauth.get("expiresAt")
+    if expires_at_ms is not None:
         try:
-            data = json.loads(CLAUDE_CREDENTIALS_PATH.read_text(encoding="utf-8"))
-            oauth = data.get("claudeAiOauth") or {}
-            tok = oauth.get("accessToken")
+            if float(expires_at_ms) / 1000.0 < time.time():
+                logger.warning(
+                    "anthropic_plan: Claude Code OAuth token has expired -- "
+                    "run `claude` to refresh your login"
+                )
+                return None
+        except (TypeError, ValueError):
+            pass
+    return tok
+
+
+def _read_oauth_token_from_keychain() -> Optional[str]:
+    """Read credentials from the macOS Keychain (service: 'Claude Code-credentials')."""
+    try:
+        result = subprocess.run(
+            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            data = json.loads(result.stdout.strip())
+            return _parse_oauth_data(data)
+    except FileNotFoundError:
+        pass  # 'security' binary not available (non-macOS)
+    except Exception as exc:
+        logger.debug("anthropic_plan: keychain read failed: %s", exc)
+    return None
+
+
+def _read_oauth_token_from_file() -> Optional[str]:
+    """Read credentials from ``~/.claude/.credentials.json``."""
+    try:
+        data = json.loads(CLAUDE_CREDENTIALS_PATH.read_text(encoding="utf-8"))
+        return _parse_oauth_data(data)
+    except FileNotFoundError:
+        logger.error(
+            "anthropic_plan: Claude Code credentials not found at %s -- "
+            "run `claude` once to log in",
+            CLAUDE_CREDENTIALS_PATH,
+        )
+    except Exception as exc:
+        logger.warning("anthropic_plan: failed to read %s: %s", CLAUDE_CREDENTIALS_PATH, exc)
+    return None
+
+
+def _read_oauth_token() -> Optional[str]:
+    """Read the current access token from the macOS Keychain (preferred) or
+    ``~/.claude/.credentials.json`` (fallback / non-macOS).
+    """
+    import sys as _sys
+    with _token_cache_lock:
+        if _sys.platform == "darwin":
+            tok = _read_oauth_token_from_keychain()
             if tok:
                 return tok
-        except FileNotFoundError:
-            logger.error(
-                "Claude Code credentials not found at %s -- run `claude` once to log in",
-                CLAUDE_CREDENTIALS_PATH,
-            )
-        except Exception as exc:
-            logger.warning("Failed to read %s: %s", CLAUDE_CREDENTIALS_PATH, exc)
-    return None
+            # Fall back to file in case the user is running a non-Keychain build
+        return _read_oauth_token_from_file()
 
 
 # --------------------------------------------------------------------------- #
