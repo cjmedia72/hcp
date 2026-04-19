@@ -1,4 +1,4 @@
-# hermes-claude-plan
+# hermes-cp
 
 [English](./README.md) | [中文](./README_CN.md)
 
