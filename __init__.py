@@ -33,18 +33,32 @@ _proxy_spec.loader.exec_module(_proxy)
 
 PROVIDER_KEY = "anthropic_plan"
 PROVIDER_DEFAULT_MODEL = "claude-opus-4-6"
+_MANAGED_TAG = "anthropic_plan_plugin"
 
 
-def _build_provider_entry(port: int) -> dict:
+def _build_provider_entry(port: int, model_id: str, display_name: str = "") -> dict:
     return {
-        "name": "anthropic_plan",
+        "name": f"Claude Sub: {display_name or model_id}",
         "base_url": f"http://127.0.0.1:{port}",
         "api_mode": "anthropic_messages",
-        "model": PROVIDER_DEFAULT_MODEL,
-        "models_endpoint": "/v1/models",
+        "model": model_id,
         "key_env": "ANTHROPIC_PLAN_DUMMY",
-        "_managed_by": "anthropic_plan_plugin",
+        "_managed_by": _MANAGED_TAG,
     }
+
+
+def _fetch_model_list(port: int) -> list:
+    """Query the local proxy for available models."""
+    import json
+    import urllib.request
+    try:
+        url = f"http://127.0.0.1:{port}/v1/models"
+        resp = urllib.request.urlopen(url, timeout=10)
+        data = json.loads(resp.read())
+        return data.get("data", [])
+    except Exception as exc:
+        logger.warning("anthropic_plan: could not fetch model list from proxy: %s", exc)
+        return []
 
 
 # -- config.yaml management ------------------------------------------------- #
@@ -87,7 +101,7 @@ def _backup(path: Path) -> Path:
 
 
 def ensure_provider_in_config(port: int) -> Optional[Path]:
-    """Insert or refresh the ``custom_providers`` entry for this plugin."""
+    """Insert or refresh ``custom_providers`` entries for all available models."""
     cfg_path = _config_path()
     if not cfg_path.exists():
         logger.warning("anthropic_plan: %s not found -- skipping config injection", cfg_path)
@@ -100,41 +114,40 @@ def ensure_provider_in_config(port: int) -> Optional[Path]:
     if not isinstance(data, dict):
         return None
 
-    desired = _build_provider_entry(port)
-    changed = False
+    # Fetch live model list from the proxy
+    models = _fetch_model_list(port)
+    if not models:
+        # Fallback: register at least the default model
+        models = [{"id": PROVIDER_DEFAULT_MODEL, "name": "Claude Opus 4.6"}]
 
     custom = data.get("custom_providers")
     if not isinstance(custom, list):
         custom = []
         data["custom_providers"] = custom
 
-    existing_idx = None
-    for i, entry in enumerate(custom):
-        if isinstance(entry, dict) and (
-            entry.get("name") == desired["name"]
-            or entry.get("_managed_by") == "anthropic_plan_plugin"
-        ):
-            existing_idx = i
-            break
+    # Remove all old managed entries
+    old_len = len(custom)
+    custom[:] = [
+        e for e in custom
+        if not (isinstance(e, dict) and e.get("_managed_by") == _MANAGED_TAG)
+    ]
+    changed = len(custom) != old_len
 
-    if existing_idx is None:
-        custom.append(desired)
+    # Add fresh entries for each model
+    for m in models:
+        model_id = m.get("id", "")
+        display_name = m.get("name", model_id)
+        entry = _build_provider_entry(port, model_id, display_name)
+        custom.append(entry)
         changed = True
-    else:
-        existing = custom[existing_idx]
-        if (
-            existing.get("base_url") != desired["base_url"]
-            or existing.get("api_mode") != desired["api_mode"]
-            or existing.get("_managed_by") != desired["_managed_by"]
-        ):
-            custom[existing_idx] = desired
-            changed = True
+
+    data["custom_providers"] = custom
 
     # Clean up any stale providers.anthropic_plan from earlier versions
     providers = data.get("providers")
     if isinstance(providers, dict) and PROVIDER_KEY in providers:
         old = providers[PROVIDER_KEY]
-        if isinstance(old, dict) and old.get("_managed_by") == "anthropic_plan_plugin":
+        if isinstance(old, dict) and old.get("_managed_by") == _MANAGED_TAG:
             del providers[PROVIDER_KEY]
             if not providers:
                 del data["providers"]
@@ -146,7 +159,8 @@ def ensure_provider_in_config(port: int) -> Optional[Path]:
     bak = _backup(cfg_path)
     try:
         _dump_yaml(data, cfg_path, ya)
-        logger.info("anthropic_plan: wrote custom_providers entry (backup: %s)", bak.name)
+        logger.info("anthropic_plan: wrote %d model entries to custom_providers (backup: %s)",
+                     len(models), bak.name)
         return bak
     except Exception as exc:
         try:
@@ -176,7 +190,7 @@ def remove_provider_from_config() -> bool:
         keep = []
         for entry in custom:
             if isinstance(entry, dict) and (
-                entry.get("_managed_by") == "anthropic_plan_plugin"
+                entry.get("_managed_by") == _MANAGED_TAG
                 or entry.get("name") == PROVIDER_KEY
             ):
                 changed = True
@@ -191,7 +205,7 @@ def remove_provider_from_config() -> bool:
     providers = data.get("providers")
     if isinstance(providers, dict) and PROVIDER_KEY in providers:
         entry = providers.get(PROVIDER_KEY)
-        if isinstance(entry, dict) and entry.get("_managed_by") == "anthropic_plan_plugin":
+        if isinstance(entry, dict) and entry.get("_managed_by") == _MANAGED_TAG:
             del providers[PROVIDER_KEY]
             if not providers:
                 del data["providers"]
