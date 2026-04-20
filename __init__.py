@@ -48,17 +48,23 @@ def _build_provider_entry(port: int, model_id: str, display_name: str = "") -> d
 
 
 def _fetch_model_list(port: int) -> list:
-    """Query the local proxy for available models."""
+    """Query the local proxy for available models, with retry."""
     import json
     import urllib.request
-    try:
-        url = f"http://127.0.0.1:{port}/v1/models"
-        resp = urllib.request.urlopen(url, timeout=10)
-        data = json.loads(resp.read())
-        return data.get("data", [])
-    except Exception as exc:
-        logger.warning("anthropic_plan: could not fetch model list from proxy: %s", exc)
-        return []
+    for attempt in range(3):
+        try:
+            url = f"http://127.0.0.1:{port}/v1/models"
+            resp = urllib.request.urlopen(url, timeout=15)
+            data = json.loads(resp.read())
+            models = data.get("data", [])
+            if models:
+                return models
+            # Empty response — proxy might still be fetching, retry
+            time.sleep(2)
+        except Exception as exc:
+            logger.warning("anthropic_plan: model fetch attempt %d failed: %s", attempt + 1, exc)
+            time.sleep(2)
+    return []
 
 
 # -- config.yaml management ------------------------------------------------- #
@@ -125,13 +131,11 @@ def ensure_provider_in_config(port: int) -> Optional[Path]:
         custom = []
         data["custom_providers"] = custom
 
-    # Remove all old managed entries
-    old_len = len(custom)
+    # Always clear old managed entries and rewrite with fresh data
     custom[:] = [
         e for e in custom
         if not (isinstance(e, dict) and e.get("_managed_by") == _MANAGED_TAG)
     ]
-    changed = len(custom) != old_len
 
     # Add fresh entries for each model
     for m in models:
@@ -139,9 +143,9 @@ def ensure_provider_in_config(port: int) -> Optional[Path]:
         display_name = m.get("name", model_id)
         entry = _build_provider_entry(port, model_id, display_name)
         custom.append(entry)
-        changed = True
 
     data["custom_providers"] = custom
+    changed = True  # always write — models may have changed upstream
 
     # Clean up any stale providers.anthropic_plan from earlier versions
     providers = data.get("providers")
