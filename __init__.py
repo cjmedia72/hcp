@@ -243,6 +243,7 @@ def register(ctx) -> None:
         port = None
 
     if port is not None:
+        time.sleep(1)  # let proxy fully start before querying models
         try:
             ensure_provider_in_config(port)
         except Exception as exc:
