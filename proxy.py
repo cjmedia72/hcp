@@ -33,6 +33,11 @@ DEFAULT_PORT = int(os.environ.get("HERMES_ANTHROPIC_PLAN_PORT", "28765"))
 PORT_RETRY_LIMIT = 10
 UPSTREAM = "https://api.anthropic.com"
 
+# Live model cache — fetched from Anthropic's /v1/models API
+_models_cache: Optional[list] = None
+_models_cache_at: float = 0.0
+_MODELS_CACHE_TTL = 3600  # re-fetch every hour
+
 CLAUDE_CREDENTIALS_PATH = Path.home() / ".claude" / ".credentials.json"
 
 _cached_cc_version: Optional[str] = None
@@ -152,6 +157,80 @@ def _read_oauth_token() -> Optional[str]:
                 return tok
             # Fall back to file in case the user is running a non-Keychain build
         return _read_oauth_token_from_file()
+
+
+# --------------------------------------------------------------------------- #
+# Live model discovery                                                        #
+# --------------------------------------------------------------------------- #
+
+
+def _fetch_models_from_anthropic() -> list:
+    """Fetch the model list from Anthropic's API using the OAuth token.
+
+    Returns a list of OpenAI-compatible model dicts.  Results are cached
+    for ``_MODELS_CACHE_TTL`` seconds.  On failure returns the cached
+    list (if any) or an empty list.
+    """
+    global _models_cache, _models_cache_at
+    now = time.time()
+    if _models_cache is not None and (now - _models_cache_at) < _MODELS_CACHE_TTL:
+        return _models_cache
+
+    token = _read_oauth_token()
+    if not token:
+        return _models_cache or []
+
+    all_models: list = []
+    after_id: Optional[str] = None
+    max_pages = 10  # safety limit
+
+    try:
+        for _ in range(max_pages):
+            url = f"{UPSTREAM}/v1/models?limit=100"
+            if after_id:
+                url += f"&after_id={after_id}"
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "anthropic-version": "2023-06-01",
+                "user-agent": f"claude-cli/{_detect_claude_code_version()} (external, cli)",
+                "x-app": "cli",
+            }
+            # Add required beta headers
+            headers["anthropic-beta"] = "claude-code-20250219,oauth-2025-04-20"
+
+            req = urllib.request.Request(url, headers=headers, method="GET")
+            resp = urllib.request.urlopen(req, timeout=15)
+            data = json.loads(resp.read())
+
+            for m in data.get("data", []):
+                model_id = m.get("id", "")
+                display_name = m.get("display_name", model_id)
+                all_models.append({
+                    "id": model_id,
+                    "object": "model",
+                    "created": int(now),
+                    "owned_by": "anthropic",
+                    "name": display_name,
+                })
+
+            if not data.get("has_more", False):
+                break
+            after_id = data.get("last_id")
+            if not after_id:
+                break
+
+    except Exception as exc:
+        logger.warning("anthropic_plan: failed to fetch /v1/models: %s", exc)
+        if _models_cache is not None:
+            return _models_cache
+        return all_models if all_models else []
+
+    if all_models:
+        _models_cache = all_models
+        _models_cache_at = now
+        logger.info("anthropic_plan: fetched %d models from Anthropic API", len(all_models))
+    return all_models
 
 
 # --------------------------------------------------------------------------- #
@@ -309,6 +388,10 @@ class _ProxyHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if self.path == "/_health":
             self._send_json(200, {"status": "ok", "upstream": UPSTREAM})
+            return
+        if self.path == "/v1/models":
+            models = _fetch_models_from_anthropic()
+            self._send_json(200, {"object": "list", "data": models})
             return
         self._send_json(404, {"error": "not_found"})
 
