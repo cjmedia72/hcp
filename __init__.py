@@ -41,6 +41,7 @@ def _build_provider_entry(port: int) -> dict:
         "base_url": f"http://127.0.0.1:{port}",
         "api_mode": "anthropic_messages",
         "model": PROVIDER_DEFAULT_MODEL,
+        "models_endpoint": "/v1/models",
         "key_env": "ANTHROPIC_PLAN_DUMMY",
         "_managed_by": "anthropic_plan_plugin",
     }
