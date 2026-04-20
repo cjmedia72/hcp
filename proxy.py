@@ -588,6 +588,10 @@ def start_proxy(preferred_port: int = DEFAULT_PORT) -> int:
                 daemon=True,
             )
             _server_thread.start()
+            # Clear model cache on fresh start so first query gets live data
+            global _models_cache, _models_cache_at
+            _models_cache = None
+            _models_cache_at = 0.0
             logger.info("anthropic_plan proxy listening on http://127.0.0.1:%d", port)
             return port
         raise RuntimeError(
