@@ -38,7 +38,7 @@ _MANAGED_TAG = "anthropic_plan_plugin"
 
 def _build_provider_entry(port: int, model_id: str, display_name: str = "") -> dict:
     return {
-        "name": f"Claude Sub: {display_name or model_id}",
+        "name": "Claude Sub",
         "base_url": f"http://127.0.0.1:{port}",
         "api_mode": "anthropic_messages",
         "model": model_id,
